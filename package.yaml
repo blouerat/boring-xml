@@ -1,0 +1,58 @@
+name:                boring-xml
+version:             0.1.0.0
+github:              "blouerat/boring-xml"
+license:             BSD3
+author:              "Bastien Louërat"
+maintainer:          "b.louerat@gmail.com"
+copyright:           "2020 Bastien Louërat"
+
+extra-source-files:
+- README.md
+
+# Metadata used when publishing your package
+# synopsis:            Short description of your package
+category:            XML
+
+description:         Please see the README on GitHub at <https://github.com/blouerat/boring-xml#readme>
+
+ghc-options: -Wall -Werror
+
+default-extensions:
+- BlockArguments
+- DerivingStrategies
+- GeneralizedNewtypeDeriving
+- LambdaCase
+- OverloadedStrings
+- RecordWildCards
+
+dependencies:
+- base >= 4.7 && < 5
+- text
+- xml-conduit
+
+library:
+  source-dirs: src
+
+executables:
+  boring-xml-example:
+    main:                Main.hs
+    source-dirs:         example
+    ghc-options:
+    - -threaded
+    - -rtsopts
+    - -with-rtsopts=-N
+    dependencies:
+    - boring-xml
+
+tests:
+  boring-xml-test:
+    main:                Main.hs
+    source-dirs:         test
+    ghc-options:
+    - -threaded
+    - -rtsopts
+    - -with-rtsopts=-N
+    dependencies:
+    - boring-xml
+    - tasty
+    - tasty-hunit

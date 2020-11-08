@@ -1,0 +1,8 @@
+cradle:
+  stack:
+    - path: "./src"
+      component: "boring-xml:lib"
+    - path: "./test"
+      component: "boring-xml:test:boring-xml-test"
+    - path: "./example"
+      component: "boring-xml:exe:boring-xml-example"

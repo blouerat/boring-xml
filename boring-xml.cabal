@@ -1,0 +1,74 @@
+cabal-version: 1.12
+
+-- This file has been generated from package.yaml by hpack version 0.33.0.
+--
+-- see: https://github.com/sol/hpack
+--
+-- hash: a242a6ac885ca94d52a6f78d8ba8c9b706ceb4c5f15f1c16658793f832207a29
+
+name:           boring-xml
+version:        0.1.0.0
+description:    Please see the README on GitHub at <https://github.com/blouerat/boring-xml#readme>
+category:       XML
+homepage:       https://github.com/blouerat/boring-xml#readme
+bug-reports:    https://github.com/blouerat/boring-xml/issues
+author:         Bastien Louërat
+maintainer:     b.louerat@gmail.com
+copyright:      2020 Bastien Louërat
+license:        BSD3
+license-file:   LICENSE
+build-type:     Simple
+extra-source-files:
+    README.md
+
+source-repository head
+  type: git
+  location: https://github.com/blouerat/boring-xml
+
+library
+  exposed-modules:
+      Boring.XML.Schema
+  other-modules:
+      Paths_boring_xml
+  hs-source-dirs:
+      src
+  default-extensions: BlockArguments DerivingStrategies GeneralizedNewtypeDeriving LambdaCase OverloadedStrings RecordWildCards
+  ghc-options: -Wall -Werror
+  build-depends:
+      base >=4.7 && <5
+    , text
+    , xml-conduit
+  default-language: Haskell2010
+
+executable boring-xml-example
+  main-is: Main.hs
+  other-modules:
+      Paths_boring_xml
+  hs-source-dirs:
+      example
+  default-extensions: BlockArguments DerivingStrategies GeneralizedNewtypeDeriving LambdaCase OverloadedStrings RecordWildCards
+  ghc-options: -Wall -Werror -threaded -rtsopts -with-rtsopts=-N
+  build-depends:
+      base >=4.7 && <5
+    , boring-xml
+    , text
+    , xml-conduit
+  default-language: Haskell2010
+
+test-suite boring-xml-test
+  type: exitcode-stdio-1.0
+  main-is: Main.hs
+  other-modules:
+      Paths_boring_xml
+  hs-source-dirs:
+      test
+  default-extensions: BlockArguments DerivingStrategies GeneralizedNewtypeDeriving LambdaCase OverloadedStrings RecordWildCards
+  ghc-options: -Wall -Werror -threaded -rtsopts -with-rtsopts=-N
+  build-depends:
+      base >=4.7 && <5
+    , boring-xml
+    , tasty
+    , tasty-hunit
+    , text
+    , xml-conduit
+  default-language: Haskell2010
