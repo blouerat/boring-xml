@@ -4,7 +4,7 @@ cabal-version: 1.12
 --
 -- see: https://github.com/sol/hpack
 --
--- hash: a242a6ac885ca94d52a6f78d8ba8c9b706ceb4c5f15f1c16658793f832207a29
+-- hash: bc84c88f98c8137e84551c6739022c27b995c71aa0ea811c75894beef88f9f15
 
 name:           boring-xml
 version:        0.1.0.0
@@ -36,6 +36,7 @@ library
   ghc-options: -Wall -Werror
   build-depends:
       base >=4.7 && <5
+    , containers
     , text
     , xml-conduit
   default-language: Haskell2010
@@ -51,6 +52,7 @@ executable boring-xml-example
   build-depends:
       base >=4.7 && <5
     , boring-xml
+    , containers
     , text
     , xml-conduit
   default-language: Haskell2010
@@ -67,6 +69,7 @@ test-suite boring-xml-test
   build-depends:
       base >=4.7 && <5
     , boring-xml
+    , containers
     , tasty
     , tasty-hunit
     , text

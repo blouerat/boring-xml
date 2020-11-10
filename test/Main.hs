@@ -13,7 +13,8 @@ main =
   Tasty.defaultMain $
     Tasty.testGroup
       "Boring.XML.Schema"
-      [ contentAsTests
+      [ contentAsTests,
+        rootTests
       ]
 
 contentAsTests :: Tasty.TestTree
@@ -39,16 +40,16 @@ contentAsTests =
                   elementNodes = mempty
                 }
             parentElement =
-              XML.Element
-                { elementName = "parent",
-                  elementAttributes = mempty,
-                  elementNodes =
+              Schema.ElementContent
+                { ecAttributes = mempty,
+                  ecNodes =
                     [ XML.NodeContent "content",
                       XML.NodeElement childElement,
                       XML.NodeComment "comment"
                     ]
                 }
-         in Schema.contentAs Right parentElement @?= Left (Schema.ElementNotContent childElement)
+            schema = Schema.contentAs Right
+         in Schema.applySchema schema parentElement @?= Left (Schema.Path [], Schema.ElementNotContent childElement)
 
     instructionNotContentTest =
       HUnit.testCase "Returns an InstructionNotContent error if one of the children is an Instruction" $
@@ -58,40 +59,40 @@ contentAsTests =
                   instructionData = "data"
                 }
             element =
-              XML.Element
-                { elementName = "element",
-                  elementAttributes = mempty,
-                  elementNodes =
+              Schema.ElementContent
+                { ecAttributes = mempty,
+                  ecNodes =
                     [ XML.NodeContent "content",
                       XML.NodeInstruction instruction,
                       XML.NodeComment "comment"
                     ]
                 }
-         in Schema.contentAs Right element @?= Left (Schema.InstructionNotContent instruction)
+            schema = Schema.contentAs Right
+         in Schema.applySchema schema element @?= Left (Schema.Path [], Schema.InstructionNotContent instruction)
 
     noChildrenNoContentTest =
       HUnit.testCase "Returns a NoContent error if the element has no children" $
         let element =
-              XML.Element
-                { elementName = "element",
-                  elementAttributes = mempty,
-                  elementNodes = []
+              Schema.ElementContent
+                { ecAttributes = mempty,
+                  ecNodes = []
                 }
-         in Schema.contentAs Right element @?= Left Schema.NoContent
+            schema = Schema.contentAs Right
+         in Schema.applySchema schema element @?= Left (Schema.Path [], Schema.NoContent)
 
     childrenAllCommentsNoContentTest =
       HUnit.testCase "Returns a NoContent error if all of the children are comments" $
         let element =
-              XML.Element
-                { elementName = "element",
-                  elementAttributes = mempty,
-                  elementNodes =
+              Schema.ElementContent
+                { ecAttributes = mempty,
+                  ecNodes =
                     [ XML.NodeComment "not",
                       XML.NodeComment "that",
                       XML.NodeComment "important"
                     ]
                 }
-         in Schema.contentAs Right element @?= Left Schema.NoContent
+            schema = Schema.contentAs Right
+         in Schema.applySchema schema element @?= Left (Schema.Path [], Schema.NoContent)
 
     contentParsingErrorTest =
       HUnit.testCase "Returns a ContentParsingError error if the parsing function fails" $
@@ -99,37 +100,36 @@ contentAsTests =
             errorMessage = "nope"
             parser = const (Left errorMessage)
             element =
-              XML.Element
-                { elementName = "element",
-                  elementAttributes = mempty,
-                  elementNodes =
+              Schema.ElementContent
+                { ecAttributes = mempty,
+                  ecNodes =
                     [ XML.NodeContent input
                     ]
                 }
+            schema = Schema.contentAs @Int parser
             contentParsingError = Schema.ContentParsingError (Schema.ParsingError input (Schema.ParsingErrorMessage errorMessage))
-         in Schema.contentAs @Int parser element @?= Left contentParsingError
+         in Schema.applySchema schema element @?= Left (Schema.Path [], contentParsingError)
 
     concatenateInputTest =
       HUnit.testCase "Concatenates Content children" $
         let element =
-              XML.Element
-                { elementName = "element",
-                  elementAttributes = mempty,
-                  elementNodes =
+              Schema.ElementContent
+                { ecAttributes = mempty,
+                  ecNodes =
                     [ XML.NodeContent "pine",
                       XML.NodeComment "comment",
                       XML.NodeContent "apple"
                     ]
                 }
-         in Schema.contentAs Right element @?= Right "pineapple"
+            schema = Schema.contentAs Right
+         in Schema.applySchema schema element @?= Right "pineapple"
 
     stripInputTest =
       HUnit.testCase "Strips outer whitespaces from Content children" $
         let element =
-              XML.Element
-                { elementName = "element",
-                  elementAttributes = mempty,
-                  elementNodes =
+              Schema.ElementContent
+                { ecAttributes = mempty,
+                  ecNodes =
                     [ XML.NodeContent "\n  ",
                       XML.NodeContent "alpha",
                       XML.NodeComment "comment",
@@ -138,7 +138,8 @@ contentAsTests =
                       XML.NodeContent "\t \n\n"
                     ]
                 }
-         in Schema.contentAs Right element @?= Right "alpha bravo"
+            schema = Schema.contentAs Right
+         in Schema.applySchema schema element @?= Right "alpha bravo"
 
     parseBoolTest =
       HUnit.testCase "Successfully parses a boolean" $
@@ -147,14 +148,59 @@ contentAsTests =
               "False" -> Right False
               _ -> Left "Invalid boolean"
             element =
-              XML.Element
-                { elementName = "element",
-                  elementAttributes = mempty,
-                  elementNodes =
+              Schema.ElementContent
+                { ecAttributes = mempty,
+                  ecNodes =
                     [ XML.NodeContent "\n  ",
                       XML.NodeContent "True",
                       XML.NodeComment "comment",
                       XML.NodeContent "\n"
                     ]
                 }
-         in Schema.contentAs parser element @?= Right True
+            schema = Schema.contentAs parser
+         in Schema.applySchema schema element @?= Right True
+
+rootTests :: Tasty.TestTree
+rootTests =
+  Tasty.testGroup
+    "root"
+    [ invalidRootElementTest,
+      schemaErrorTest,
+      schemaValueTest
+    ]
+  where
+    invalidRootElementTest =
+      HUnit.testCase "Returns an InvalidRootElement error if the root element name doesn't match" $
+        let element =
+              XML.Element
+                { elementName = "welp",
+                  elementAttributes = mempty,
+                  elementNodes = []
+                }
+            schema = Schema.contentAs Right
+            invalidRootElementError = Schema.InvalidRootElement element
+         in Schema.root "name" schema element @?= Left (Schema.Path ["name"], invalidRootElementError)
+
+    schemaErrorTest =
+      HUnit.testCase "Surfaces the error returned by the given schema if the root element name does match" $
+        let element =
+              XML.Element
+                { elementName = "name",
+                  elementAttributes = mempty,
+                  elementNodes = []
+                }
+            schema = Schema.contentAs Right
+         in Schema.root "name" schema element @?= Left (Schema.Path ["name"], Schema.NoContent)
+
+    schemaValueTest =
+      HUnit.testCase "Surfaces the value returned by the given schema if the root element name does match" $
+        let element =
+              XML.Element
+                { elementName = "name",
+                  elementAttributes = mempty,
+                  elementNodes =
+                    [ XML.NodeContent "content"
+                    ]
+                }
+            schema = Schema.contentAs Right
+         in Schema.root "name" schema element @?= Right "content"

@@ -7,6 +7,7 @@ import qualified Text.XML as XML
 main :: IO ()
 main = do
   XML.Document {..} <- XML.readFile XML.def "example.xml"
-  putStrLn case Schema.contentAs Right documentRoot of
-    Left err -> "Invalid XML: " <> show err
+  let schema = Schema.contentAs Right
+  putStrLn case Schema.root "example" schema documentRoot of
+    Left (path, err) -> "Invalid XML: " <> show err <> " @ " <> Text.unpack (Schema.showPath path)
     Right value -> Text.unpack value
