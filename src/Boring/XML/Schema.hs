@@ -1,7 +1,9 @@
+{-# LANGUAGE DerivingVia #-}
 {-# LANGUAGE TupleSections #-}
 
 module Boring.XML.Schema where
 
+import qualified Control.Monad.Trans.Reader as Reader
 import qualified Data.Bifunctor as Bifunctor
 import qualified Data.Foldable as Foldable
 import Data.Map (Map)
@@ -13,10 +15,11 @@ import qualified Text.XML as XML
 newtype Schema a = Schema
   { applySchema :: ElementContent -> Either (Path, Error) a
   }
+  deriving (Functor, Applicative) via (Reader.ReaderT ElementContent (Either (Path, Error)))
 
 failure :: Error -> Either (Path, Error) a
-failure
-  = Left . (Path [],)
+failure =
+  Left . (Path [],)
 
 applySchema' :: Schema a -> XML.Element -> Either (Path, Error) a
 applySchema' schema XML.Element {..} =
@@ -111,11 +114,25 @@ root name schema xmlElement@XML.Element {..} =
 -- applies the schema to its attributes and children
 requiredElement :: Text -> Schema a -> Schema a
 requiredElement name schema =
-  Schema \ElementContent {..} ->
-    case Maybe.mapMaybe extractElements ecNodes of
+  Schema \elementContent ->
+    case childrenElements name elementContent of
       [] -> failure (ElementNotFound name)
       [oneElement] -> applySchema' schema oneElement
       _ -> failure (MoreThanOneElement name)
+
+-- | Ensures that there's at most one element for the given name.
+-- If one exists, applies the schema to its attributes and children
+element :: Text -> Schema a -> Schema (Maybe a)
+element name schema =
+  Schema \elementContent ->
+    case childrenElements name elementContent of
+      [] -> Right Nothing
+      [oneElement] -> Just <$> applySchema' schema oneElement
+      _ -> failure (MoreThanOneElement name)
+
+childrenElements :: Text -> ElementContent -> [XML.Element]
+childrenElements name ElementContent {..} =
+  Maybe.mapMaybe extractElements ecNodes
   where
     extractElements =
       \case

@@ -1,16 +1,56 @@
 module Main where
 
 import qualified Boring.XML.Schema as Schema
+import Data.Text (Text)
 import qualified Data.Text as Text
 import qualified Text.XML as XML
 
 main :: IO ()
 main = do
   XML.Document {..} <- XML.readFile XML.def "example.xml"
-  let schema =
-        Schema.requiredElement "message"
-          . Schema.requiredElement "value"
-          $ Schema.contentAs Right
-  putStrLn case Schema.root "example" schema documentRoot of
+  putStrLn case Schema.root "example" exampleSchema documentRoot of
     Left (path, err) -> "Invalid XML: " <> show err <> " @ " <> show path
-    Right value -> Text.unpack value
+    Right Example {..} -> Text.unpack $ displayMessage message
+
+newtype Example = Example
+  { message :: Message
+  }
+
+exampleSchema :: Schema.Schema Example
+exampleSchema =
+  Example
+    <$> Schema.requiredElement "message" messageSchema
+
+data Message = Message
+  { description :: Maybe Text,
+    value :: Text,
+    published :: Maybe Bool
+  }
+
+messageSchema :: Schema.Schema Message
+messageSchema =
+  Message
+    <$> Schema.element "description" contentAsText
+    <*> Schema.requiredElement "value" contentAsText
+    <*> Schema.element "published" contentAsBool
+  where
+    contentAsText =
+      Schema.contentAs Right
+
+    contentAsBool =
+      Schema.contentAs \case
+        "True" -> Right True
+        "False" -> Right False
+        _ -> Left "Invalid boolean value"
+
+displayMessage :: Message -> Text
+displayMessage Message {..} =
+  value
+    <> foldMap displayDescription description
+    <> foldMap displayPublished published
+  where
+    displayDescription d =
+      " (" <> d <> ")"
+
+    displayPublished p =
+      if p then "" else " -- UNPUBLISHED"

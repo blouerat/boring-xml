@@ -2,5 +2,7 @@
   <message type="greetings">
     <description>Says hello to the world</description>
     <value>Hello World! <!-- Not the most creative, but that'll do --></value>
+    <welp/>
+    <published>False</published>
   </message>
 </example>
