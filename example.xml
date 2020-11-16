@@ -1,3 +1,6 @@
-<example type="greetings">
-  Hello World! <!-- Not the most creative, but that'll do -->
+<example>
+  <message type="greetings">
+    <description>Says hello to the world</description>
+    <value>Hello World! <!-- Not the most creative, but that'll do --></value>
+  </message>
 </example>

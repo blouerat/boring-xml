@@ -5,43 +5,60 @@ module Boring.XML.Schema where
 import qualified Data.Bifunctor as Bifunctor
 import qualified Data.Foldable as Foldable
 import Data.Map (Map)
+import qualified Data.Maybe as Maybe
 import Data.Text (Text)
 import qualified Data.Text as Text
 import qualified Text.XML as XML
 
-data Schema a = Schema
+newtype Schema a = Schema
   { applySchema :: ElementContent -> Either (Path, Error) a
   }
+
+failure :: Error -> Either (Path, Error) a
+failure
+  = Left . (Path [],)
+
+applySchema' :: Schema a -> XML.Element -> Either (Path, Error) a
+applySchema' schema XML.Element {..} =
+  prependElementNameToPath . applySchema schema $ elementContent
+  where
+    prependElementNameToPath =
+      Bifunctor.first prependElementNameSegment
+
+    prependElementNameSegment (Path segments, err) =
+      (Path (elementLocalName : segments), err)
+
+    elementLocalName =
+      XML.nameLocalName elementName
+
+    elementContent =
+      ElementContent elementAttributes elementNodes
 
 data ElementContent = ElementContent
   { ecAttributes :: Map XML.Name Text,
     ecNodes :: [XML.Node]
   }
 
-newtype Path = Path [Text]
+newtype Path = Path
+  { pathSegments :: [Text]
+  }
   deriving newtype (Eq)
 
 instance Show Path where
   show = Text.unpack . showPath
 
-appendSegment :: Text -> Path -> Path
-appendSegment segment (Path segments) =
-  Path (segment : segments)
-
-pathSegments :: Path -> [Text]
-pathSegments (Path segments) =
-  reverse segments
-
 showPath :: Path -> Text
 showPath =
-  foldMap (Text.cons '/') . pathSegments
+  ("/" <>) . Text.intercalate "/" . pathSegments
 
 data Error
   = ElementNotContent XML.Element
   | InstructionNotContent XML.Instruction
   | NoContent
   | ContentParsingError ParsingError
-  | InvalidRootElement XML.Element
+  | RootElementNotFound Text
+  | ElementNotFound Text
+  | MoreThanOneElement Text
   deriving stock (Eq, Show)
 
 data ParsingError = ParsingError
@@ -85,8 +102,26 @@ contentAs parser =
 -- | Checks that the given root 'XML.Element' has the right name, and if so,
 -- feeds its attributes and children nodes to the given 'Schema'.
 root :: Text -> Schema a -> XML.Element -> Either (Path, Error) a
-root name schema rootElement@XML.Element {..} =
-  Bifunctor.first (Bifunctor.first (appendSegment name)) $
-    if XML.nameLocalName elementName /= name
-      then Left ((Path []), InvalidRootElement rootElement)
-      else applySchema schema (ElementContent elementAttributes elementNodes)
+root name schema xmlElement@XML.Element {..} =
+  if XML.nameLocalName elementName /= name
+    then failure (RootElementNotFound name)
+    else applySchema' schema xmlElement
+
+-- | Ensures that there's one and only one element for the given name,
+-- applies the schema to its attributes and children
+requiredElement :: Text -> Schema a -> Schema a
+requiredElement name schema =
+  Schema \ElementContent {..} ->
+    case Maybe.mapMaybe extractElements ecNodes of
+      [] -> failure (ElementNotFound name)
+      [oneElement] -> applySchema' schema oneElement
+      _ -> failure (MoreThanOneElement name)
+  where
+    extractElements =
+      \case
+        XML.NodeElement xmlElement@XML.Element {..}
+          | XML.nameLocalName elementName == name -> Just xmlElement
+          | otherwise -> Nothing
+        XML.NodeInstruction _ -> Nothing
+        XML.NodeContent _ -> Nothing
+        XML.NodeComment _ -> Nothing
