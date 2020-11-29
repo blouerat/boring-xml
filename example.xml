@@ -6,5 +6,9 @@
     <published>False</published>
     <tag>Important</tag>
     <tag>Information</tag>
+    <comments>
+      <comment>Cheers</comment>
+      <comment>Hello!</comment>
+    </comments>
   </message>
 </example>

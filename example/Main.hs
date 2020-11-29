@@ -4,6 +4,7 @@ import qualified Boring.XML.Schema as Schema
 import Data.Text (Text)
 import qualified Data.Text as Text
 import qualified Text.XML as XML
+import qualified Data.List.NonEmpty as NonEmpty
 
 main :: IO ()
 main = do
@@ -25,7 +26,8 @@ data Message = Message
   { description :: Maybe Text,
     value :: Text,
     published :: Maybe Bool,
-    tags :: [Text]
+    tags :: [Text],
+    comments :: [Text]
   }
 
 messageSchema :: Schema.Schema Message
@@ -35,6 +37,7 @@ messageSchema =
     <*> Schema.requiredElement "value" contentAsText
     <*> Schema.element "published" contentAsBool
     <*> Schema.elements "tag" contentAsText
+    <*> commentsSchema
   where
     contentAsText =
       Schema.contentAs Right
@@ -45,12 +48,19 @@ messageSchema =
         "False" -> Right False
         _ -> Left "Invalid boolean value"
 
+    commentsSchema =
+      foldMap NonEmpty.toList <$> Schema.element "comments" commentSchema
+
+    commentSchema =
+      Schema.elements1 "comment" contentAsText
+
 displayMessage :: Message -> Text
 displayMessage Message {..} =
   value
     <> foldMap displayDescription description
     <> foldMap displayPublished published
     <> displayTags
+    <> displayComments
   where
     displayDescription d =
       " (" <> d <> ")"
@@ -61,4 +71,9 @@ displayMessage Message {..} =
     displayTags =
       case tags of
         [] -> ""
-        _ -> ", tags: " <> Text.intercalate ", " tags
+        _ -> "\n  tags: " <> Text.intercalate ", " tags
+
+    displayComments =
+      case comments of
+        [] -> ""
+        _ -> "\n  comments: " <> Text.intercalate ", " comments

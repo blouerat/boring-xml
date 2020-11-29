@@ -6,6 +6,7 @@ module Boring.XML.Schema where
 import qualified Control.Monad.Trans.Reader as Reader
 import qualified Data.Bifunctor as Bifunctor
 import qualified Data.Foldable as Foldable
+import Data.List.NonEmpty (NonEmpty(..))
 import Data.Map (Map)
 import qualified Data.Maybe as Maybe
 import Data.Text (Text)
@@ -40,7 +41,7 @@ prependIndexedSegment ix segment segments =
 data Path
   = Empty
   | Root Text Segments
-  deriving Eq
+  deriving (Eq)
 
 instance Show Path where
   show = Text.unpack . showPath
@@ -145,6 +146,17 @@ element name schema =
 elements :: Text -> Schema a -> Schema [a]
 elements name schema =
   Schema (traverse toResult . childrenElements name schema)
+  where
+    toResult (ix, result) =
+      Bifunctor.first (Bifunctor.first (prependIndexedSegment ix name)) result
+
+-- | Extract all children with the given name, fail if none are found
+elements1 :: Text -> Schema a -> Schema (NonEmpty a)
+elements1 name schema =
+  Schema \elementContent ->
+    traverse toResult (childrenElements name schema elementContent) >>= \case
+      [] -> Left ([], ElementNotFound name)
+      hd : tl -> Right (hd :| tl)
   where
     toResult (ix, result) =
       Bifunctor.first (Bifunctor.first (prependIndexedSegment ix name)) result
