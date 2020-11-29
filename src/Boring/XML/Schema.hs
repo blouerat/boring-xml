@@ -37,19 +37,22 @@ prependIndexedSegment :: Int -> Text -> Segments -> Segments
 prependIndexedSegment ix segment segments =
   IndexedSegment ix segment : segments
 
-newtype Path
-  = Path (Maybe (Text, Segments))
-  deriving newtype (Eq)
+data Path
+  = Empty
+  | Root Text Segments
+  deriving Eq
 
 instance Show Path where
   show = Text.unpack . showPath
 
 showPath :: Path -> Text
-showPath (Path path) =
-  foldMap ("/" <>) (foldMap showSegments path)
+showPath path =
+  "/" <> Text.intercalate "/" (showSegments path)
   where
-    showSegments (rootSegment, childrenSegments) =
-      rootSegment : fmap showSegment childrenSegments
+    showSegments =
+      \case
+        Empty -> []
+        Root rootSegment childrenSegments -> escape rootSegment : fmap showSegment childrenSegments
 
     showSegment =
       \case
@@ -112,11 +115,11 @@ contentAs parser =
 root :: Text -> Schema a -> XML.Element -> Either (Path, Error) a
 root name schema XML.Element {..} =
   if XML.nameLocalName elementName /= name
-    then Left (Path Nothing, RootElementNotFound name)
+    then Left (Empty, RootElementNotFound name)
     else Bifunctor.first toPath (applySchema schema (ElementContent elementAttributes elementNodes))
   where
     toPath (segments, err) =
-      (Path (Just (name, segments)), err)
+      (Root name segments, err)
 
 -- | Ensures that there's one and only one element for the given name,
 -- applies the schema to its attributes and children

@@ -13,12 +13,36 @@ main =
   Tasty.defaultMain $
     Tasty.testGroup
       "Boring.XML.Schema"
-      [ contentAsTests,
+      [ showPathTests,
+        contentAsTests,
         rootTests,
         requiredElementTests,
         elementTests,
         elementsTests
       ]
+
+showPathTests :: Tasty.TestTree
+showPathTests =
+  Tasty.testGroup
+    "showPath"
+    [ emptyPathTest,
+      segmentsTest,
+      escapeTest
+    ]
+  where
+    emptyPathTest =
+      HUnit.testCase "Returns `/` for the empty path" $
+        Schema.showPath Schema.Empty @?= "/"
+
+    segmentsTest =
+      HUnit.testCase "Returns all segments preceded by `/` and with indices in square brackets" $
+        let path = Schema.Root "root" [Schema.SingleSegment "parent", Schema.IndexedSegment 42 "child"]
+         in Schema.showPath path @?= "/root/parent/child[42]"
+
+    escapeTest =
+      HUnit.testCase "Escapes `/`, `[`, and `]` from within each segment" $
+        let path = Schema.Root "r/o[o]t" [Schema.SingleSegment "]par][en//t", Schema.IndexedSegment 42 "//child[*]"]
+         in Schema.showPath path @?= "/r\\/o\\[o\\]t/\\]par\\]\\[en\\/\\/t/\\/\\/child\\[*\\][42]"
 
 contentAsTests :: Tasty.TestTree
 contentAsTests =
@@ -182,7 +206,7 @@ rootTests =
                 }
             schema = Schema.contentAs Right
             rootElementNotFoundError = Schema.RootElementNotFound "name"
-         in Schema.root "name" schema element @?= Left (Schema.Path Nothing, rootElementNotFoundError)
+         in Schema.root "name" schema element @?= Left (Schema.Empty, rootElementNotFoundError)
 
     schemaErrorTest =
       HUnit.testCase "Surfaces the error returned by the given schema if the root element name does match" $
@@ -193,7 +217,7 @@ rootTests =
                   elementNodes = []
                 }
             schema = Schema.contentAs Right
-         in Schema.root "name" schema element @?= Left (Schema.Path (Just ("name", [])), Schema.NoContent)
+         in Schema.root "name" schema element @?= Left (Schema.Root "name" [], Schema.NoContent)
 
     schemaValueTest =
       HUnit.testCase "Surfaces the value returned by the given schema if the root element name does match" $
