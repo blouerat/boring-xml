@@ -30,13 +30,17 @@ data Segment
 
 type Segments = [Segment]
 
-prependSingleSegment :: Text -> Segments -> Segments
-prependSingleSegment segment segments =
-  SingleSegment segment : segments
+prependSegment :: Segment -> Either (Segments, Error) a -> Either (Segments, Error) a
+prependSegment segment
+  = Bifunctor.first (Bifunctor.first (segment :))
 
-prependIndexedSegment :: Int -> Text -> Segments -> Segments
-prependIndexedSegment ix segment segments =
-  IndexedSegment ix segment : segments
+prependSingleSegment :: Text -> Either (Segments, Error) a -> Either (Segments, Error) a
+prependSingleSegment segment =
+  prependSegment (SingleSegment segment)
+
+prependIndexedSegment :: Int -> Text -> Either (Segments, Error) a -> Either (Segments, Error) a
+prependIndexedSegment ix segment =
+  prependSegment (IndexedSegment ix segment)
 
 data Path
   = Empty
@@ -129,7 +133,7 @@ requiredElement name schema =
   Schema \elementContent ->
     case childrenElements name schema elementContent of
       [] -> Left ([], ElementNotFound name)
-      [(_, result)] -> Bifunctor.first (Bifunctor.first (prependSingleSegment name)) result
+      [(_, result)] -> prependSingleSegment name result
       _ -> Left ([], MoreThanOneElement name)
 
 -- | Ensures that there's at most one element for the given name.
@@ -139,7 +143,7 @@ element name schema =
   Schema \elementContent ->
     case childrenElements name schema elementContent of
       [] -> Right Nothing
-      [(_, result)] -> Bifunctor.bimap (Bifunctor.first (prependSingleSegment name)) Just result
+      [(_, result)] -> Just <$> prependSingleSegment name result
       _ -> Left ([], MoreThanOneElement name)
 
 -- | Extract all children with the given name
@@ -148,7 +152,7 @@ elements name schema =
   Schema (traverse toResult . childrenElements name schema)
   where
     toResult (ix, result) =
-      Bifunctor.first (Bifunctor.first (prependIndexedSegment ix name)) result
+      prependIndexedSegment ix name result
 
 -- | Extract all children with the given name, fail if none are found
 elements1 :: Text -> Schema a -> Schema (NonEmpty a)
@@ -159,7 +163,7 @@ elements1 name schema =
       hd : tl -> Right (hd :| tl)
   where
     toResult (ix, result) =
-      Bifunctor.first (Bifunctor.first (prependIndexedSegment ix name)) result
+      prependIndexedSegment ix name result
 
 childrenElements :: Text -> Schema a -> ElementContent -> [(Int, Either (Segments, Error) a)]
 childrenElements name schema =
