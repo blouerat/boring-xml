@@ -16,7 +16,8 @@ main =
       [ contentAsTests,
         rootTests,
         requiredElementTests,
-        elementTests
+        elementTests,
+        elementsTests
       ]
 
 contentAsTests :: Tasty.TestTree
@@ -51,7 +52,7 @@ contentAsTests =
                     ]
                 }
             schema = Schema.contentAs Right
-         in Schema.applySchema schema parentElement @?= Left (Schema.Path [], Schema.ElementNotContent childElement)
+         in Schema.applySchema schema parentElement @?= Left ([], Schema.ElementNotContent childElement)
 
     instructionNotContentTest =
       HUnit.testCase "Returns an InstructionNotContent error if one of the children is an Instruction" $
@@ -70,7 +71,7 @@ contentAsTests =
                     ]
                 }
             schema = Schema.contentAs Right
-         in Schema.applySchema schema element @?= Left (Schema.Path [], Schema.InstructionNotContent instruction)
+         in Schema.applySchema schema element @?= Left ([], Schema.InstructionNotContent instruction)
 
     noChildrenNoContentTest =
       HUnit.testCase "Returns a NoContent error if the element has no children" $
@@ -80,7 +81,7 @@ contentAsTests =
                   ecNodes = []
                 }
             schema = Schema.contentAs Right
-         in Schema.applySchema schema element @?= Left (Schema.Path [], Schema.NoContent)
+         in Schema.applySchema schema element @?= Left ([], Schema.NoContent)
 
     childrenAllCommentsNoContentTest =
       HUnit.testCase "Returns a NoContent error if all of the children are comments" $
@@ -94,7 +95,7 @@ contentAsTests =
                     ]
                 }
             schema = Schema.contentAs Right
-         in Schema.applySchema schema element @?= Left (Schema.Path [], Schema.NoContent)
+         in Schema.applySchema schema element @?= Left ([], Schema.NoContent)
 
     contentParsingErrorTest =
       HUnit.testCase "Returns a ContentParsingError error if the parsing function fails" $
@@ -110,7 +111,7 @@ contentAsTests =
                 }
             schema = Schema.contentAs @Int parser
             contentParsingError = Schema.ContentParsingError (Schema.ParsingError input (Schema.ParsingErrorMessage errorMessage))
-         in Schema.applySchema schema element @?= Left (Schema.Path [], contentParsingError)
+         in Schema.applySchema schema element @?= Left ([], contentParsingError)
 
     concatenateInputTest =
       HUnit.testCase "Concatenates Content children" $
@@ -181,7 +182,7 @@ rootTests =
                 }
             schema = Schema.contentAs Right
             rootElementNotFoundError = Schema.RootElementNotFound "name"
-         in Schema.root "name" schema element @?= Left (Schema.Path [], rootElementNotFoundError)
+         in Schema.root "name" schema element @?= Left (Schema.Path Nothing, rootElementNotFoundError)
 
     schemaErrorTest =
       HUnit.testCase "Surfaces the error returned by the given schema if the root element name does match" $
@@ -192,7 +193,7 @@ rootTests =
                   elementNodes = []
                 }
             schema = Schema.contentAs Right
-         in Schema.root "name" schema element @?= Left (Schema.Path ["name"], Schema.NoContent)
+         in Schema.root "name" schema element @?= Left (Schema.Path (Just ("name", [])), Schema.NoContent)
 
     schemaValueTest =
       HUnit.testCase "Surfaces the value returned by the given schema if the root element name does match" $
@@ -225,7 +226,7 @@ requiredElementTests =
                   ecNodes = []
                 }
             schema = Schema.requiredElement "element" (Schema.contentAs Right)
-         in Schema.applySchema schema element @?= Left (Schema.Path [], Schema.ElementNotFound "element")
+         in Schema.applySchema schema element @?= Left ([], Schema.ElementNotFound "element")
 
     moreThanOneElementTest =
       HUnit.testCase "Returns a MoreThanOneElement error if there is more than one element for the given name, even if the schema for the child was to return an error too" $
@@ -242,7 +243,7 @@ requiredElementTests =
                   ecNodes = [childNode, childNode]
                 }
             schema = Schema.requiredElement "child" (Schema.contentAs Right)
-         in Schema.applySchema schema parent @?= Left (Schema.Path [], Schema.MoreThanOneElement "child")
+         in Schema.applySchema schema parent @?= Left ([], Schema.MoreThanOneElement "child")
 
     childErrorTest =
       HUnit.testCase "Surfaces the error returned by the child with the element name in the path" $
@@ -258,7 +259,7 @@ requiredElementTests =
                   ecNodes = [XML.NodeElement child]
                 }
             schema = Schema.requiredElement "child" (Schema.contentAs Right)
-         in Schema.applySchema schema parent @?= Left (Schema.Path ["child"], Schema.NoContent)
+         in Schema.applySchema schema parent @?= Left ([Schema.SingleSegment "child"], Schema.NoContent)
 
     childValueTest =
       HUnit.testCase "Surfaces the value returned by the child with the element name in the path" $
@@ -301,7 +302,7 @@ elementTests =
                   ecNodes = [childNode, childNode]
                 }
             schema = Schema.element "child" (Schema.contentAs Right)
-         in Schema.applySchema schema parent @?= Left (Schema.Path [], Schema.MoreThanOneElement "child")
+         in Schema.applySchema schema parent @?= Left ([], Schema.MoreThanOneElement "child")
 
     childErrorTest =
       HUnit.testCase "Surfaces the error returned by the child with the element name in the path" $
@@ -317,7 +318,7 @@ elementTests =
                   ecNodes = [XML.NodeElement child]
                 }
             schema = Schema.element "child" (Schema.contentAs Right)
-         in Schema.applySchema schema parent @?= Left (Schema.Path ["child"], Schema.NoContent)
+         in Schema.applySchema schema parent @?= Left ([Schema.SingleSegment "child"], Schema.NoContent)
 
     childValueTest =
       HUnit.testCase "Surfaces the value returned by the child with the element name in the path" $
@@ -344,3 +345,118 @@ elementTests =
                 }
             schema = Schema.element "element" (Schema.contentAs Right)
          in Schema.applySchema schema element @?= Right Nothing
+
+elementsTests :: Tasty.TestTree
+elementsTests =
+  Tasty.testGroup
+    "elements"
+    [ childErrorTest,
+      secondChildErrorTest,
+      noChildTest,
+      noMatchingChildTest,
+      childrenContentTest
+    ]
+  where
+    childErrorTest =
+      HUnit.testCase "Surfaces the error returned by the first child with the element index and name in the path" $
+        let other =
+              XML.Element
+                { elementName = "other",
+                  elementAttributes = mempty,
+                  elementNodes = [XML.NodeContent "ok"]
+                }
+            child =
+              XML.Element
+                { elementName = "child",
+                  elementAttributes = mempty,
+                  elementNodes = []
+                }
+            parent =
+              Schema.ElementContent
+                { ecAttributes = mempty,
+                  ecNodes = [XML.NodeElement other, XML.NodeElement child, XML.NodeElement child]
+                }
+            schema = Schema.elements "child" (Schema.contentAs Right)
+         in Schema.applySchema schema parent @?= Left ([Schema.IndexedSegment 1 "child"], Schema.NoContent)
+
+    secondChildErrorTest =
+      HUnit.testCase "Surfaces the error returned by the second child with the element index and name in the path" $
+        let other =
+              XML.Element
+                { elementName = "other",
+                  elementAttributes = mempty,
+                  elementNodes = [XML.NodeContent "ok"]
+                }
+            child1 =
+              XML.Element
+                { elementName = "child",
+                  elementAttributes = mempty,
+                  elementNodes = [XML.NodeContent "content"]
+                }
+            child2 =
+              XML.Element
+                { elementName = "child",
+                  elementAttributes = mempty,
+                  elementNodes = []
+                }
+            parent =
+              Schema.ElementContent
+                { ecAttributes = mempty,
+                  ecNodes = [XML.NodeElement other, XML.NodeElement child1, XML.NodeElement child2]
+                }
+            schema = Schema.elements "child" (Schema.contentAs Right)
+         in Schema.applySchema schema parent @?= Left ([Schema.IndexedSegment 2 "child"], Schema.NoContent)
+
+    noChildTest =
+      HUnit.testCase "Returns the empty list if the element doesn't have any children" $
+        let element =
+              Schema.ElementContent
+                { ecAttributes = mempty,
+                  ecNodes = []
+                }
+            schema = Schema.elements "child" (Schema.contentAs Right)
+         in Schema.applySchema schema element @?= Right []
+
+    noMatchingChildTest =
+      HUnit.testCase "Returns the empty list if the element doesn't have any matching children" $
+        let child =
+              XML.Element
+                { elementName = "child",
+                  elementAttributes = mempty,
+                  elementNodes = []
+                }
+            parent =
+              Schema.ElementContent
+                { ecAttributes = mempty,
+                  ecNodes = [XML.NodeElement child]
+                }
+            schema = Schema.elements "other" (Schema.contentAs Right)
+         in Schema.applySchema schema parent @?= Right []
+
+    childrenContentTest =
+      HUnit.testCase "Surfaces content of matching children" $
+        let other =
+              XML.Element
+                { elementName = "other",
+                  elementAttributes = mempty,
+                  elementNodes = [XML.NodeContent "ok"]
+                }
+            child1 =
+              XML.Element
+                { elementName = "child",
+                  elementAttributes = mempty,
+                  elementNodes = [XML.NodeContent "content"]
+                }
+            child2 =
+              XML.Element
+                { elementName = "child",
+                  elementAttributes = mempty,
+                  elementNodes = [XML.NodeContent "more content"]
+                }
+            parent =
+              Schema.ElementContent
+                { ecAttributes = mempty,
+                  ecNodes = [XML.NodeElement other, XML.NodeElement child1, XML.NodeElement child2]
+                }
+            schema = Schema.elements "child" (Schema.contentAs Right)
+         in Schema.applySchema schema parent @?= Right ["content", "more content"]

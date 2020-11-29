@@ -24,7 +24,8 @@ exampleSchema =
 data Message = Message
   { description :: Maybe Text,
     value :: Text,
-    published :: Maybe Bool
+    published :: Maybe Bool,
+    tags :: [Text]
   }
 
 messageSchema :: Schema.Schema Message
@@ -33,6 +34,7 @@ messageSchema =
     <$> Schema.element "description" contentAsText
     <*> Schema.requiredElement "value" contentAsText
     <*> Schema.element "published" contentAsBool
+    <*> Schema.elements "tag" contentAsText
   where
     contentAsText =
       Schema.contentAs Right
@@ -48,9 +50,15 @@ displayMessage Message {..} =
   value
     <> foldMap displayDescription description
     <> foldMap displayPublished published
+    <> displayTags
   where
     displayDescription d =
       " (" <> d <> ")"
 
     displayPublished p =
       if p then "" else " -- UNPUBLISHED"
+
+    displayTags =
+      case tags of
+        [] -> ""
+        _ -> ", tags: " <> Text.intercalate ", " tags

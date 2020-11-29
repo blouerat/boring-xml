@@ -13,46 +13,51 @@ import qualified Data.Text as Text
 import qualified Text.XML as XML
 
 newtype Schema a = Schema
-  { applySchema :: ElementContent -> Either (Path, Error) a
+  { applySchema :: ElementContent -> Either (Segments, Error) a
   }
-  deriving (Functor, Applicative) via (Reader.ReaderT ElementContent (Either (Path, Error)))
-
-failure :: Error -> Either (Path, Error) a
-failure =
-  Left . (Path [],)
-
-applySchema' :: Schema a -> XML.Element -> Either (Path, Error) a
-applySchema' schema XML.Element {..} =
-  prependElementNameToPath . applySchema schema $ elementContent
-  where
-    prependElementNameToPath =
-      Bifunctor.first prependElementNameSegment
-
-    prependElementNameSegment (Path segments, err) =
-      (Path (elementLocalName : segments), err)
-
-    elementLocalName =
-      XML.nameLocalName elementName
-
-    elementContent =
-      ElementContent elementAttributes elementNodes
+  deriving (Functor, Applicative) via (Reader.ReaderT ElementContent (Either (Segments, Error)))
 
 data ElementContent = ElementContent
   { ecAttributes :: Map XML.Name Text,
     ecNodes :: [XML.Node]
   }
 
-newtype Path = Path
-  { pathSegments :: [Text]
-  }
+data Segment
+  = SingleSegment Text
+  | IndexedSegment Int Text
+  deriving (Eq, Show)
+
+type Segments = [Segment]
+
+prependSingleSegment :: Text -> Segments -> Segments
+prependSingleSegment segment segments =
+  SingleSegment segment : segments
+
+prependIndexedSegment :: Int -> Text -> Segments -> Segments
+prependIndexedSegment ix segment segments =
+  IndexedSegment ix segment : segments
+
+newtype Path
+  = Path (Maybe (Text, Segments))
   deriving newtype (Eq)
 
 instance Show Path where
   show = Text.unpack . showPath
 
 showPath :: Path -> Text
-showPath =
-  ("/" <>) . Text.intercalate "/" . pathSegments
+showPath (Path path) =
+  foldMap ("/" <>) (foldMap showSegments path)
+  where
+    showSegments (rootSegment, childrenSegments) =
+      rootSegment : fmap showSegment childrenSegments
+
+    showSegment =
+      \case
+        SingleSegment segment -> escape segment
+        IndexedSegment ix segment -> escape segment <> "[" <> Text.pack (show ix) <> "]"
+
+    escape =
+      Text.replace "/" "\\/" . Text.replace "[" "\\[" . Text.replace "]" "\\]"
 
 data Error
   = ElementNotContent XML.Element
@@ -84,7 +89,7 @@ newtype ParsingErrorMessage
 contentAs :: (Text -> Either Text a) -> Schema a
 contentAs parser =
   Schema \ElementContent {..} ->
-    Bifunctor.first (Path [],) do
+    Bifunctor.first ([],) do
       bitsOfContent <- traverse extractContent ecNodes
       case Foldable.fold bitsOfContent of
         Nothing -> Left NoContent
@@ -105,40 +110,54 @@ contentAs parser =
 -- | Checks that the given root 'XML.Element' has the right name, and if so,
 -- feeds its attributes and children nodes to the given 'Schema'.
 root :: Text -> Schema a -> XML.Element -> Either (Path, Error) a
-root name schema xmlElement@XML.Element {..} =
+root name schema XML.Element {..} =
   if XML.nameLocalName elementName /= name
-    then failure (RootElementNotFound name)
-    else applySchema' schema xmlElement
+    then Left (Path Nothing, RootElementNotFound name)
+    else Bifunctor.first toPath (applySchema schema (ElementContent elementAttributes elementNodes))
+  where
+    toPath (segments, err) =
+      (Path (Just (name, segments)), err)
 
 -- | Ensures that there's one and only one element for the given name,
 -- applies the schema to its attributes and children
 requiredElement :: Text -> Schema a -> Schema a
 requiredElement name schema =
   Schema \elementContent ->
-    case childrenElements name elementContent of
-      [] -> failure (ElementNotFound name)
-      [oneElement] -> applySchema' schema oneElement
-      _ -> failure (MoreThanOneElement name)
+    case childrenElements name schema elementContent of
+      [] -> Left ([], ElementNotFound name)
+      [(_, result)] -> Bifunctor.first (Bifunctor.first (prependSingleSegment name)) result
+      _ -> Left ([], MoreThanOneElement name)
 
 -- | Ensures that there's at most one element for the given name.
 -- If one exists, applies the schema to its attributes and children
 element :: Text -> Schema a -> Schema (Maybe a)
 element name schema =
   Schema \elementContent ->
-    case childrenElements name elementContent of
+    case childrenElements name schema elementContent of
       [] -> Right Nothing
-      [oneElement] -> Just <$> applySchema' schema oneElement
-      _ -> failure (MoreThanOneElement name)
+      [(_, result)] -> Bifunctor.bimap (Bifunctor.first (prependSingleSegment name)) Just result
+      _ -> Left ([], MoreThanOneElement name)
 
-childrenElements :: Text -> ElementContent -> [XML.Element]
-childrenElements name ElementContent {..} =
-  Maybe.mapMaybe extractElements ecNodes
+-- | Extract all children with the given name
+elements :: Text -> Schema a -> Schema [a]
+elements name schema =
+  Schema (traverse toResult . childrenElements name schema)
+  where
+    toResult (ix, result) =
+      Bifunctor.first (Bifunctor.first (prependIndexedSegment ix name)) result
+
+childrenElements :: Text -> Schema a -> ElementContent -> [(Int, Either (Segments, Error) a)]
+childrenElements name schema =
+  zipWith applySchema' [1 ..] . Maybe.mapMaybe extractElements . ecNodes
   where
     extractElements =
       \case
-        XML.NodeElement xmlElement@XML.Element {..}
-          | XML.nameLocalName elementName == name -> Just xmlElement
+        XML.NodeElement XML.Element {..}
+          | XML.nameLocalName elementName == name -> Just (ElementContent elementAttributes elementNodes)
           | otherwise -> Nothing
         XML.NodeInstruction _ -> Nothing
         XML.NodeContent _ -> Nothing
         XML.NodeComment _ -> Nothing
+
+    applySchema' ix elementContent =
+      (ix, applySchema schema elementContent)

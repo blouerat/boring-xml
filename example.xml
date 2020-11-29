@@ -4,5 +4,7 @@
     <value>Hello World! <!-- Not the most creative, but that'll do --></value>
     <welp/>
     <published>False</published>
+    <tag>Important</tag>
+    <tag>Information</tag>
   </message>
 </example>
