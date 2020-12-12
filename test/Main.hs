@@ -20,7 +20,8 @@ main =
         requiredElementTests,
         elementTests,
         elementsTests,
-        elements1Tests
+        elements1Tests,
+        elementWithNameTests
       ]
 
 showPathTests :: Tasty.TestTree
@@ -28,8 +29,7 @@ showPathTests =
   Tasty.testGroup
     "showPath"
     [ emptyPathTest,
-      segmentsTest,
-      escapeTest
+      segmentsTest
     ]
   where
     emptyPathTest =
@@ -38,13 +38,15 @@ showPathTests =
 
     segmentsTest =
       HUnit.testCase "Returns all segments preceded by `/` and with indices in square brackets" $
-        let path = Schema.Root "root" [Schema.SingleSegment "parent", Schema.IndexedSegment 42 "child"]
-         in Schema.showPath path @?= "/root/parent/child[42]"
-
-    escapeTest =
-      HUnit.testCase "Escapes `/`, `[`, and `]` from within each segment" $
-        let path = Schema.Root "r/o[o]t" [Schema.SingleSegment "]par][en//t", Schema.IndexedSegment 42 "//child[*]"]
-         in Schema.showPath path @?= "/r\\/o\\[o\\]t/\\]par\\]\\[en\\/\\/t/\\/\\/child\\[*\\][42]"
+        let path =
+              Schema.Root
+                "a"
+                [ Schema.SingleSegment "b",
+                  Schema.IndexedSegment 42 "c",
+                  Schema.SingleSegment (Schema.WithNamespace "d" (Schema.LocalName "e")),
+                  Schema.IndexedSegment 10 (Schema.WithPrefix "f" (Schema.LocalName "g"))
+                ]
+         in Schema.showPath path @?= "/a/b/c[42]/{d}e/f:g[10]"
 
 contentAsTests :: Tasty.TestTree
 contentAsTests =
@@ -601,3 +603,93 @@ elements1Tests =
                 }
             schema = Schema.elements1 "child" (Schema.contentAs Right)
          in Schema.applySchema schema parent @?= Right ("content" :| ["more content"])
+
+elementWithNameTests :: Tasty.TestTree
+elementWithNameTests =
+  Tasty.testGroup
+    "elementWithName"
+    [ differentLocalNameTest,
+      localNameNoNamespaceTest,
+      localNameMatchTest,
+      differentNamespaceTest,
+      namespaceMatchTest,
+      differentPrefixTest,
+      prefixMatchTest
+    ]
+  where
+    differentLocalNameTest =
+      HUnit.testCase "Returns nothing if local name doesn't match" $
+        let element =
+              XML.Element
+                { elementName = "element",
+                  elementAttributes = mempty,
+                  elementNodes = []
+                }
+         in Schema.elementWithName "element'" element @?= Nothing
+
+    localNameNoNamespaceTest =
+      HUnit.testCase "Returns nothing if local name does match but element has a namespace" $
+        let element =
+              XML.Element
+                { elementName = XML.Name "element" (Just "namespace") Nothing,
+                  elementAttributes = mempty,
+                  elementNodes = []
+                }
+         in Schema.elementWithName "element" element @?= Nothing
+
+    localNameMatchTest =
+      HUnit.testCase "Returns element content if local name does match ignoring prefix" $
+        let element =
+              XML.Element
+                { elementName = XML.Name "element" Nothing (Just "prefix"),
+                  elementAttributes = mempty,
+                  elementNodes = []
+                }
+            elementContent = Schema.ElementContent mempty []
+         in Schema.elementWithName "element" element @?= Just elementContent
+
+    differentNamespaceTest =
+      HUnit.testCase "Returns nothing if namespace does not match" $
+        let element =
+              XML.Element
+                { elementName = XML.Name "element" (Just "namspace") (Just "prefix"),
+                  elementAttributes = mempty,
+                  elementNodes = []
+                }
+            namePredicate = Schema.WithNamespace "namespace'" (Schema.LocalName "element")
+         in Schema.elementWithName namePredicate element @?= Nothing
+
+    namespaceMatchTest =
+      HUnit.testCase "Returns element content if namespace and local name do match ignoring prefix" $
+        let element =
+              XML.Element
+                { elementName = XML.Name "element" (Just "namespace") (Just "prefix"),
+                  elementAttributes = mempty,
+                  elementNodes = []
+                }
+            namePredicate = Schema.WithNamespace "namespace" (Schema.LocalName "element")
+            elementContent = Schema.ElementContent mempty []
+         in Schema.elementWithName namePredicate element @?= Just elementContent
+
+    differentPrefixTest =
+      HUnit.testCase "Returns nothing if prefix does not match" $
+        let element =
+              XML.Element
+                { elementName = XML.Name "element" (Just "namspace") (Just "prefix"),
+                  elementAttributes = mempty,
+                  elementNodes = []
+                }
+            namePredicate = Schema.WithPrefix "prefix'" (Schema.LocalName "element")
+         in Schema.elementWithName namePredicate element @?= Nothing
+
+    prefixMatchTest =
+      HUnit.testCase "Returns element content if prefix and local name do match ignoring namespace" $
+        let element =
+              XML.Element
+                { elementName = XML.Name "element" (Just "namespace") (Just "prefix"),
+                  elementAttributes = mempty,
+                  elementNodes = []
+                }
+            namePredicate = Schema.WithPrefix "prefix" (Schema.LocalName "element")
+            elementContent = Schema.ElementContent mempty []
+         in Schema.elementWithName namePredicate element @?= Just elementContent

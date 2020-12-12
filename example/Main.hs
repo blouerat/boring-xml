@@ -1,10 +1,10 @@
 module Main where
 
 import qualified Boring.XML.Schema as Schema
+import qualified Data.List.NonEmpty as NonEmpty
 import Data.Text (Text)
 import qualified Data.Text as Text
 import qualified Text.XML as XML
-import qualified Data.List.NonEmpty as NonEmpty
 
 main :: IO ()
 main = do
@@ -34,8 +34,8 @@ messageSchema :: Schema.Schema Message
 messageSchema =
   Message
     <$> Schema.element "description" contentAsText
-    <*> Schema.requiredElement "value" contentAsText
-    <*> Schema.element "published" contentAsBool
+    <*> Schema.requiredElement (withExampleNamespace "value") contentAsText
+    <*> Schema.element (withExamplePrefix "published") contentAsBool
     <*> Schema.elements "tag" contentAsText
     <*> commentsSchema
   where
@@ -53,6 +53,12 @@ messageSchema =
 
     commentSchema =
       Schema.elements1 "comment" contentAsText
+
+    withExampleNamespace localName
+      = Schema.WithNamespace "http://example.org/schema" (Schema.LocalName localName)
+
+    withExamplePrefix localName
+      = Schema.WithPrefix "example" (Schema.LocalName localName)
 
 displayMessage :: Message -> Text
 displayMessage Message {..} =

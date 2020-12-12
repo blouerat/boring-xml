@@ -1,9 +1,9 @@
-<example>
+<example xmlns:example='http://example.org/schema'>
   <message type="greetings">
     <description>Says hello to the world</description>
-    <value>Hello World! <!-- Not the most creative, but that'll do --></value>
+    <example:value>Hello World! <!-- Not the most creative, but that'll do --></example:value>
     <welp/>
-    <published>False</published>
+    <example:published>False</example:published>
     <tag>Important</tag>
     <tag>Information</tag>
     <comments>

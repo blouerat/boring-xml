@@ -6,9 +6,10 @@ module Boring.XML.Schema where
 import qualified Control.Monad.Trans.Reader as Reader
 import qualified Data.Bifunctor as Bifunctor
 import qualified Data.Foldable as Foldable
-import Data.List.NonEmpty (NonEmpty(..))
+import Data.List.NonEmpty (NonEmpty (..))
 import Data.Map (Map)
 import qualified Data.Maybe as Maybe
+import Data.String (IsString, fromString)
 import Data.Text (Text)
 import qualified Data.Text as Text
 import qualified Text.XML as XML
@@ -22,29 +23,30 @@ data ElementContent = ElementContent
   { ecAttributes :: Map XML.Name Text,
     ecNodes :: [XML.Node]
   }
+  deriving (Eq, Show)
 
 data Segment
-  = SingleSegment Text
-  | IndexedSegment Int Text
+  = SingleSegment NamePredicate
+  | IndexedSegment Int NamePredicate
   deriving (Eq, Show)
 
 type Segments = [Segment]
 
 prependSegment :: Segment -> Either (Segments, Error) a -> Either (Segments, Error) a
-prependSegment segment
-  = Bifunctor.first (Bifunctor.first (segment :))
+prependSegment segment =
+  Bifunctor.first (Bifunctor.first (segment :))
 
-prependSingleSegment :: Text -> Either (Segments, Error) a -> Either (Segments, Error) a
+prependSingleSegment :: NamePredicate -> Either (Segments, Error) a -> Either (Segments, Error) a
 prependSingleSegment segment =
   prependSegment (SingleSegment segment)
 
-prependIndexedSegment :: Int -> Text -> Either (Segments, Error) a -> Either (Segments, Error) a
+prependIndexedSegment :: Int -> NamePredicate -> Either (Segments, Error) a -> Either (Segments, Error) a
 prependIndexedSegment ix segment =
   prependSegment (IndexedSegment ix segment)
 
 data Path
   = Empty
-  | Root Text Segments
+  | Root NamePredicate Segments
   deriving (Eq)
 
 instance Show Path where
@@ -57,24 +59,21 @@ showPath path =
     showSegments =
       \case
         Empty -> []
-        Root rootSegment childrenSegments -> escape rootSegment : fmap showSegment childrenSegments
+        Root rootSegment childrenSegments -> showNamePredicate rootSegment : fmap showSegment childrenSegments
 
     showSegment =
       \case
-        SingleSegment segment -> escape segment
-        IndexedSegment ix segment -> escape segment <> "[" <> Text.pack (show ix) <> "]"
-
-    escape =
-      Text.replace "/" "\\/" . Text.replace "[" "\\[" . Text.replace "]" "\\]"
+        SingleSegment segment -> showNamePredicate segment
+        IndexedSegment ix segment -> showNamePredicate segment <> "[" <> Text.pack (show ix) <> "]"
 
 data Error
   = ElementNotContent XML.Element
   | InstructionNotContent XML.Instruction
   | NoContent
   | ContentParsingError ParsingError
-  | RootElementNotFound Text
-  | ElementNotFound Text
-  | MoreThanOneElement Text
+  | RootElementNotFound NamePredicate
+  | ElementNotFound NamePredicate
+  | MoreThanOneElement NamePredicate
   deriving stock (Eq, Show)
 
 data ParsingError = ParsingError
@@ -86,6 +85,43 @@ data ParsingError = ParsingError
 newtype ParsingErrorMessage
   = ParsingErrorMessage Text
   deriving newtype (Eq, Show)
+
+newtype LocalName
+  = LocalName Text
+  deriving (Eq)
+
+data NamePredicate
+  = NameOnly LocalName
+  | WithNamespace Text LocalName
+  | WithPrefix Text LocalName
+  deriving (Eq)
+
+instance IsString NamePredicate where
+  fromString = NameOnly . LocalName . Text.pack
+
+instance Show NamePredicate where
+  show = Text.unpack . showNamePredicate
+
+showNamePredicate :: NamePredicate -> Text
+showNamePredicate =
+  \case
+    NameOnly (LocalName localName) -> localName
+    WithNamespace namespace (LocalName localName) -> "{" <> namespace <> "}" <> localName
+    WithPrefix prefix (LocalName localName) -> prefix <> ":" <> localName
+
+elementWithName :: NamePredicate -> XML.Element -> Maybe ElementContent
+elementWithName namePredicate XML.Element {..} =
+  case namePredicate of
+    NameOnly (LocalName localName)
+      | XML.nameLocalName elementName == localName && Maybe.isNothing (XML.nameNamespace elementName) -> Just elementContent
+    WithNamespace namespace (LocalName localName)
+      | XML.nameLocalName elementName == localName && XML.nameNamespace elementName == Just namespace -> Just elementContent
+    WithPrefix prefix (LocalName localName)
+      | XML.nameLocalName elementName == localName && XML.namePrefix elementName == Just prefix -> Just elementContent
+    _ -> Nothing
+  where
+    elementContent =
+      ElementContent elementAttributes elementNodes
 
 -- | Extracts content from the children of an element.
 --
@@ -117,63 +153,61 @@ contentAs parser =
 
 -- | Checks that the given root 'XML.Element' has the right name, and if so,
 -- feeds its attributes and children nodes to the given 'Schema'.
-root :: Text -> Schema a -> XML.Element -> Either (Path, Error) a
-root name schema XML.Element {..} =
-  if XML.nameLocalName elementName /= name
-    then Left (Empty, RootElementNotFound name)
-    else Bifunctor.first toPath (applySchema schema (ElementContent elementAttributes elementNodes))
+root :: NamePredicate -> Schema a -> XML.Element -> Either (Path, Error) a
+root namePredicate schema xmlElement =
+  case elementWithName namePredicate xmlElement of
+    Nothing -> Left (Empty, RootElementNotFound namePredicate)
+    Just elementContent -> Bifunctor.first toPath (applySchema schema elementContent)
   where
     toPath (segments, err) =
-      (Root name segments, err)
+      (Root namePredicate segments, err)
 
 -- | Ensures that there's one and only one element for the given name,
 -- applies the schema to its attributes and children
-requiredElement :: Text -> Schema a -> Schema a
-requiredElement name schema =
+requiredElement :: NamePredicate -> Schema a -> Schema a
+requiredElement namePredicate schema =
   Schema \elementContent ->
-    case childrenElements name schema elementContent of
-      [] -> Left ([], ElementNotFound name)
-      [(_, result)] -> prependSingleSegment name result
-      _ -> Left ([], MoreThanOneElement name)
+    case childrenElements namePredicate schema elementContent of
+      [] -> Left ([], ElementNotFound namePredicate)
+      [(_, result)] -> prependSingleSegment namePredicate result
+      _ -> Left ([], MoreThanOneElement namePredicate)
 
 -- | Ensures that there's at most one element for the given name.
 -- If one exists, applies the schema to its attributes and children
-element :: Text -> Schema a -> Schema (Maybe a)
-element name schema =
+element :: NamePredicate -> Schema a -> Schema (Maybe a)
+element namePredicate schema =
   Schema \elementContent ->
-    case childrenElements name schema elementContent of
+    case childrenElements namePredicate schema elementContent of
       [] -> Right Nothing
-      [(_, result)] -> Just <$> prependSingleSegment name result
-      _ -> Left ([], MoreThanOneElement name)
+      [(_, result)] -> Just <$> prependSingleSegment namePredicate result
+      _ -> Left ([], MoreThanOneElement namePredicate)
 
 -- | Extract all children with the given name
-elements :: Text -> Schema a -> Schema [a]
-elements name schema =
-  Schema (traverse toResult . childrenElements name schema)
+elements :: NamePredicate -> Schema a -> Schema [a]
+elements namePredicate schema =
+  Schema (traverse toResult . childrenElements namePredicate schema)
   where
     toResult (ix, result) =
-      prependIndexedSegment ix name result
+      prependIndexedSegment ix namePredicate result
 
 -- | Extract all children with the given name, fail if none are found
-elements1 :: Text -> Schema a -> Schema (NonEmpty a)
-elements1 name schema =
+elements1 :: NamePredicate -> Schema a -> Schema (NonEmpty a)
+elements1 namePredicate schema =
   Schema \elementContent ->
-    traverse toResult (childrenElements name schema elementContent) >>= \case
-      [] -> Left ([], ElementNotFound name)
+    traverse toResult (childrenElements namePredicate schema elementContent) >>= \case
+      [] -> Left ([], ElementNotFound namePredicate)
       hd : tl -> Right (hd :| tl)
   where
     toResult (ix, result) =
-      prependIndexedSegment ix name result
+      prependIndexedSegment ix namePredicate result
 
-childrenElements :: Text -> Schema a -> ElementContent -> [(Int, Either (Segments, Error) a)]
-childrenElements name schema =
+childrenElements :: NamePredicate -> Schema a -> ElementContent -> [(Int, Either (Segments, Error) a)]
+childrenElements namePredicate schema =
   zipWith applySchema' [1 ..] . Maybe.mapMaybe extractElements . ecNodes
   where
     extractElements =
       \case
-        XML.NodeElement XML.Element {..}
-          | XML.nameLocalName elementName == name -> Just (ElementContent elementAttributes elementNodes)
-          | otherwise -> Nothing
+        XML.NodeElement xmlElement -> elementWithName namePredicate xmlElement
         XML.NodeInstruction _ -> Nothing
         XML.NodeContent _ -> Nothing
         XML.NodeComment _ -> Nothing
