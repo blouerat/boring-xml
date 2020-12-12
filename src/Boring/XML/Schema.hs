@@ -67,7 +67,7 @@ showPath path =
         IndexedSegment ix segment -> showNamePredicate segment <> "[" <> Text.pack (show ix) <> "]"
 
 data Error
-  = ElementNotContent XML.Element
+  = ElementNotContent XML.Name
   | InstructionNotContent XML.Instruction
   | NoContent
   | ContentParsingError ParsingError
@@ -141,7 +141,7 @@ contentAs parser =
   where
     extractContent =
       \case
-        XML.NodeElement e -> Left (ElementNotContent e)
+        XML.NodeElement XML.Element {..} -> Left (ElementNotContent elementName)
         XML.NodeInstruction i -> Left (InstructionNotContent i)
         XML.NodeContent c -> Right (Just c)
         XML.NodeComment _ -> Right Nothing

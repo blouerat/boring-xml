@@ -80,7 +80,7 @@ contentAsTests =
                     ]
                 }
             schema = Schema.contentAs Right
-         in Schema.applySchema schema parentElement @?= Left ([], Schema.ElementNotContent childElement)
+         in Schema.applySchema schema parentElement @?= Left ([], Schema.ElementNotContent "child")
 
     instructionNotContentTest =
       HUnit.testCase "Returns an InstructionNotContent error if one of the children is an Instruction" $
