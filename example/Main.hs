@@ -35,7 +35,7 @@ messageSchema =
   Message
     <$> Schema.element "description" contentAsText
     <*> Schema.requiredElement (withExampleNamespace "value") contentAsText
-    <*> Schema.element (withExamplePrefix "published") contentAsBool
+    <*> Schema.element (withExampleNamespace "published") contentAsBool
     <*> Schema.elements "tag" contentAsText
     <*> commentsSchema
   where
@@ -54,11 +54,8 @@ messageSchema =
     commentSchema =
       Schema.elements1 "comment" contentAsText
 
-    withExampleNamespace localName
-      = Schema.WithNamespace "http://example.org/schema" (Schema.LocalName localName)
-
-    withExamplePrefix localName
-      = Schema.WithPrefix "example" (Schema.LocalName localName)
+    withExampleNamespace localName =
+      XML.Name localName (Just "http://example.org/schema") Nothing
 
 displayMessage :: Message -> Text
 displayMessage Message {..} =
