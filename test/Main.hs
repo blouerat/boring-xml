@@ -4,6 +4,7 @@ module Main where
 
 import qualified Boring.XML.Schema as Schema
 import Data.List.NonEmpty (NonEmpty (..))
+import qualified Data.Map as Map
 import qualified Test.Tasty as Tasty
 import Test.Tasty.HUnit ((@?=))
 import qualified Test.Tasty.HUnit as HUnit
@@ -21,7 +22,8 @@ main =
         elementTests,
         elementsTests,
         elements1Tests,
-        elementContentWithNameTests
+        elementContentWithNameTests,
+        attributeTests
       ]
 
 showPathTests :: Tasty.TestTree
@@ -666,3 +668,48 @@ elementContentWithNameTests =
                 }
             elementContent = Schema.ElementContent mempty []
          in Schema.elementContentWithName "{namespace}element" element @?= Just elementContent
+
+attributeTests :: Tasty.TestTree
+attributeTests =
+  Tasty.testGroup
+    "attribute"
+    [ attributeNotFoundTest,
+      attributeErrorTest,
+      attributeValueTest
+    ]
+  where
+    attributeNotFoundTest =
+      HUnit.testCase "Returns nothing if the attribute doesn't exist" $
+        let element =
+              Schema.ElementContent
+                { ecAttributes = Map.singleton (XML.Name "attribute" (Just "namespace") Nothing) "value",
+                  ecNodes = []
+                }
+            schema = Schema.attribute "attribute" Right
+         in Schema.applySchema schema element @?= Right Nothing
+
+    attributeErrorTest =
+      HUnit.testCase "Surfaces parsing error in the attribute" $
+        let name = XML.Name "attribute" (Just "namespace") Nothing
+            value = "value"
+            element =
+              Schema.ElementContent
+                { ecAttributes = Map.singleton name value,
+                  ecNodes = []
+                }
+            parsingError = "nope"
+            schema = Schema.attribute @Int name (const (Left parsingError))
+            attributeParsingError = Schema.AttributeParsingError name (Schema.ParsingError value (Schema.ParsingErrorMessage parsingError))
+         in Schema.applySchema schema element @?= Left ([], attributeParsingError)
+
+    attributeValueTest =
+      HUnit.testCase "Surfaces parsed value in the attribute" $
+        let name = XML.Name "attribute" (Just "namespace") Nothing
+            value = "value"
+            element =
+              Schema.ElementContent
+                { ecAttributes = Map.singleton name value,
+                  ecNodes = []
+                }
+            schema = Schema.attribute name Right
+         in Schema.applySchema schema element @?= Right (Just value)

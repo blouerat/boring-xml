@@ -1,6 +1,7 @@
 module Main where
 
 import qualified Boring.XML.Schema as Schema
+import qualified Data.Foldable as Foldable
 import qualified Data.List.NonEmpty as NonEmpty
 import Data.Text (Text)
 import qualified Data.Text as Text
@@ -27,7 +28,12 @@ data Message = Message
     value :: Text,
     published :: Maybe Bool,
     tags :: [Text],
-    comments :: [Text]
+    comments :: [Comment]
+  }
+
+data Comment = Comment
+  { content :: Text,
+    useful :: Maybe Bool
   }
 
 messageSchema :: Schema.Schema Message
@@ -43,16 +49,20 @@ messageSchema =
       Schema.contentAs Right
 
     contentAsBool =
-      Schema.contentAs \case
-        "True" -> Right True
-        "False" -> Right False
-        _ -> Left "Invalid boolean value"
+      Schema.contentAs parseBool
+
+    parseBool = \case
+      "True" -> Right True
+      "False" -> Right False
+      _ -> Left "Invalid boolean value"
 
     commentsSchema =
-      foldMap NonEmpty.toList <$> Schema.element "comments" commentSchema
+      foldMap NonEmpty.toList <$> Schema.element "comments" (Schema.elements1 "comment" commentSchema)
 
     commentSchema =
-      Schema.elements1 "comment" contentAsText
+      Comment
+        <$> contentAsText
+        <*> Schema.attribute (withExampleNamespace "useful") parseBool
 
     withExampleNamespace localName =
       XML.Name localName (Just "http://example.org/schema") Nothing
@@ -79,4 +89,7 @@ displayMessage Message {..} =
     displayComments =
       case comments of
         [] -> ""
-        _ -> "\n  comments: " <> Text.intercalate ", " comments
+        _ -> "\n  comments: " <> Text.intercalate ", " (displayComment <$> comments)
+
+    displayComment Comment {..} =
+      content <> if Foldable.or useful then " (+)" else ""

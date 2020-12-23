@@ -8,6 +8,7 @@ import qualified Data.Bifunctor as Bifunctor
 import qualified Data.Foldable as Foldable
 import Data.List.NonEmpty (NonEmpty (..))
 import Data.Map (Map)
+import qualified Data.Map as Map
 import qualified Data.Maybe as Maybe
 import Data.Text (Text)
 import qualified Data.Text as Text
@@ -79,6 +80,7 @@ data Error
   | RootElementNotFound XML.Name
   | ElementNotFound XML.Name
   | MoreThanOneElement XML.Name
+  | AttributeParsingError XML.Name ParsingError
   deriving stock (Eq, Show)
 
 data ParsingError = ParsingError
@@ -188,3 +190,14 @@ elementContentWithName name XML.Element {..} =
   if elementName == name
     then Just (ElementContent elementAttributes elementNodes)
     else Nothing
+
+-- | Optionally parse an attribute
+attribute :: XML.Name -> (Text -> Either Text a) -> Schema (Maybe a)
+attribute name parser =
+  Schema \ElementContent {..} ->
+    traverse runParser (Map.lookup name ecAttributes)
+  where
+    runParser input =
+      Bifunctor.first
+        (([],) . AttributeParsingError name . ParsingError input . ParsingErrorMessage)
+        (parser input)
