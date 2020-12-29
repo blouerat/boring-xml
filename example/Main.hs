@@ -24,7 +24,8 @@ exampleSchema =
     <$> Schema.requiredElement "message" messageSchema
 
 data Message = Message
-  { description :: Maybe Text,
+  { messageType :: Text,
+    description :: Maybe Text,
     value :: Text,
     published :: Maybe Bool,
     tags :: [Text],
@@ -39,7 +40,8 @@ data Comment = Comment
 messageSchema :: Schema.Schema Message
 messageSchema =
   Message
-    <$> Schema.element "description" contentAsText
+    <$> Schema.requiredAttribute "type" Right
+    <*> Schema.element "description" contentAsText
     <*> Schema.requiredElement (withExampleNamespace "value") contentAsText
     <*> Schema.element (withExampleNamespace "published") contentAsBool
     <*> Schema.elements "tag" contentAsText
@@ -69,7 +71,9 @@ messageSchema =
 
 displayMessage :: Message -> Text
 displayMessage Message {..} =
-  value
+  messageType
+    <> ": "
+    <> value
     <> foldMap displayDescription description
     <> foldMap displayPublished published
     <> displayTags

@@ -23,7 +23,8 @@ main =
         elementsTests,
         elements1Tests,
         elementContentWithNameTests,
-        attributeTests
+        attributeTests,
+        requiredAttributeTests
       ]
 
 showPathTests :: Tasty.TestTree
@@ -713,3 +714,48 @@ attributeTests =
                 }
             schema = Schema.attribute name Right
          in Schema.applySchema schema element @?= Right (Just value)
+
+requiredAttributeTests :: Tasty.TestTree
+requiredAttributeTests =
+  Tasty.testGroup
+    "requiredAttribute"
+    [ attributeNotFoundTest,
+      attributeErrorTest,
+      attributeValueTest
+    ]
+  where
+    attributeNotFoundTest =
+      HUnit.testCase "Returns AttributeNotFound error if the attribute doesn't exist" $
+        let element =
+              Schema.ElementContent
+                { ecAttributes = Map.singleton (XML.Name "attribute" (Just "namespace") Nothing) "value",
+                  ecNodes = []
+                }
+            schema = Schema.requiredAttribute "attribute" Right
+         in Schema.applySchema schema element @?= Left ([], Schema.AttributeNotFound "attribute")
+
+    attributeErrorTest =
+      HUnit.testCase "Surfaces parsing error in the attribute" $
+        let name = XML.Name "attribute" (Just "namespace") Nothing
+            value = "value"
+            element =
+              Schema.ElementContent
+                { ecAttributes = Map.singleton name value,
+                  ecNodes = []
+                }
+            parsingError = "nope"
+            schema = Schema.requiredAttribute @Int name (const (Left parsingError))
+            attributeParsingError = Schema.AttributeParsingError name (Schema.ParsingError value (Schema.ParsingErrorMessage parsingError))
+         in Schema.applySchema schema element @?= Left ([], attributeParsingError)
+
+    attributeValueTest =
+      HUnit.testCase "Surfaces parsed value in the attribute" $
+        let name = XML.Name "attribute" (Just "namespace") Nothing
+            value = "value"
+            element =
+              Schema.ElementContent
+                { ecAttributes = Map.singleton name value,
+                  ecNodes = []
+                }
+            schema = Schema.requiredAttribute name Right
+         in Schema.applySchema schema element @?= Right value

@@ -81,6 +81,7 @@ data Error
   | ElementNotFound XML.Name
   | MoreThanOneElement XML.Name
   | AttributeParsingError XML.Name ParsingError
+  | AttributeNotFound XML.Name
   deriving stock (Eq, Show)
 
 data ParsingError = ParsingError
@@ -201,3 +202,11 @@ attribute name parser =
       Bifunctor.first
         (([],) . AttributeParsingError name . ParsingError input . ParsingErrorMessage)
         (parser input)
+
+-- | Parse a required attribute
+requiredAttribute :: XML.Name -> (Text -> Either Text a) -> Schema a
+requiredAttribute name parser =
+  Schema \elementContent ->
+    applySchema (attribute name parser) elementContent >>= \case
+      Nothing -> Left ([], AttributeNotFound name)
+      Just value -> Right value
