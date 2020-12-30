@@ -74,7 +74,7 @@ showPath path =
 
 data Error
   = ElementNotContent XML.Name
-  | InstructionNotContent XML.Instruction
+  | InstructionNotContent InstructionTarget
   | NoContent
   | ContentParsingError ParsingError
   | RootElementNotFound XML.Name
@@ -83,6 +83,10 @@ data Error
   | AttributeParsingError XML.Name ParsingError
   | AttributeNotFound XML.Name
   deriving stock (Eq, Show)
+
+newtype InstructionTarget
+  = InstructionTarget Text
+  deriving newtype (Eq, Show)
 
 data ParsingError = ParsingError
   { eInput :: Text,
@@ -113,7 +117,7 @@ contentAs parser =
     extractContent =
       \case
         XML.NodeElement XML.Element {..} -> Left (ElementNotContent elementName)
-        XML.NodeInstruction i -> Left (InstructionNotContent i)
+        XML.NodeInstruction XML.Instruction {..} -> Left (InstructionNotContent (InstructionTarget instructionTarget))
         XML.NodeContent c -> Right (Just c)
         XML.NodeComment _ -> Right Nothing
 

@@ -102,7 +102,7 @@ contentAsTests =
                     ]
                 }
             schema = Schema.contentAs Right
-         in Schema.applySchema schema element @?= Left ([], Schema.InstructionNotContent instruction)
+         in Schema.applySchema schema element @?= Left ([], Schema.InstructionNotContent (Schema.InstructionTarget "target"))
 
     noChildrenNoContentTest =
       HUnit.testCase "Returns a NoContent error if the element has no children" $
